@@ -5,6 +5,7 @@ use amm_pinocchio::{
 use mollusk_svm::{Mollusk, program};
 use solana_sdk::{
     account::{Account, WritableAccount},
+    instruction::{AccountMeta, Instruction},
     program_option::COption,
     program_pack::Pack,
     pubkey::Pubkey,
@@ -251,18 +252,18 @@ fn test_withdraw_success() {
     data.extend_from_slice(&min_amount_a.to_le_bytes());
     data.extend_from_slice(&min_amount_b.to_le_bytes());
 
-    let ix = solana_sdk::instruction::Instruction {
+    let ix = Instruction {
         program_id,
         accounts: vec![
-            solana_sdk::instruction::AccountMeta::new(user, true),
-            solana_sdk::instruction::AccountMeta::new(pool_pda, false),
-            solana_sdk::instruction::AccountMeta::new(lp_mint, false),
-            solana_sdk::instruction::AccountMeta::new(vault_a, false),
-            solana_sdk::instruction::AccountMeta::new(vault_b, false),
-            solana_sdk::instruction::AccountMeta::new(user_lp_token, false),
-            solana_sdk::instruction::AccountMeta::new(user_token_a, false),
-            solana_sdk::instruction::AccountMeta::new(user_token_b, false),
-            solana_sdk::instruction::AccountMeta::new_readonly(token_program, false),
+            AccountMeta::new(user, true),
+            AccountMeta::new(pool_pda, false),
+            AccountMeta::new(lp_mint, false),
+            AccountMeta::new(vault_a, false),
+            AccountMeta::new(vault_b, false),
+            AccountMeta::new(user_lp_token, false),
+            AccountMeta::new(user_token_a, false),
+            AccountMeta::new(user_token_b, false),
+            AccountMeta::new_readonly(token_program, false),
         ],
         data,
     };
