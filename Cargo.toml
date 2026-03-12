@@ -38,4 +38,4 @@ pinocchio-token = "0.5.0"
 mollusk-svm = "0.10.3"
 mollusk-svm-bencher = "0.10.3"
 solana-sdk = "3.0.0"
-spl-token = "9.0.0"
+spl-token = { version = "9.0.0", features = ["no-entrypoint"] }
