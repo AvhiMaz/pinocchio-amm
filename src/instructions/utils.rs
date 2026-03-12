@@ -1,15 +1,14 @@
 use crate::{constants::POOL_SEED, states::Pool};
 use pinocchio::{
-    account_info::AccountInfo,
-    instruction::{Seed, Signer},
-    program_error::ProgramError,
-    pubkey::Pubkey,
+    AccountView,
+    cpi::{Seed, Signer},
+    error::ProgramError,
 };
 
 pub fn create_pool_seed<'a>(
     pool_bump: &'a [u8; 1],
-    token_a: &'a Pubkey,
-    token_b: &'a Pubkey,
+    token_a: &'a [u8; 32],
+    token_b: &'a [u8; 32],
 ) -> [Seed<'a>; 4] {
     [
         Seed::from(POOL_SEED.as_bytes()),
@@ -19,14 +18,10 @@ pub fn create_pool_seed<'a>(
     ]
 }
 
-pub fn load_pool_data(pool: &AccountInfo) -> Result<(u8, Pubkey, Pubkey), ProgramError> {
-    let pool_data = pool.try_borrow_data()?;
+pub fn load_pool_data(pool: &AccountView) -> Result<(u8, [u8; 32], [u8; 32]), ProgramError> {
+    let pool_data = pool.try_borrow()?;
     let pool_state = Pool::load(&pool_data)?;
-    Ok((
-        pool_state.bump,
-        Pubkey::from(pool_state.token_a),
-        Pubkey::from(pool_state.token_b),
-    ))
+    Ok((pool_state.bump, pool_state.token_a, pool_state.token_b))
 }
 
 pub fn create_pool_signer<'a, 'b>(pool_seed: &'a [Seed<'b>; 4]) -> Signer<'a, 'b> {

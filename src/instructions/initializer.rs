@@ -1,10 +1,8 @@
 use bytemuck::{Pod, Zeroable};
 use pinocchio::{
-    ProgramResult,
-    account_info::AccountInfo,
-    instruction::{Seed, Signer},
-    program_error::ProgramError,
-    pubkey::Pubkey,
+    AccountView, Address, ProgramResult,
+    cpi::{Seed, Signer},
+    error::ProgramError,
     sysvars::{Sysvar, rent::Rent},
 };
 use pinocchio_system::instructions::CreateAccount;
@@ -32,8 +30,8 @@ impl InitializeInstructionData {
 }
 
 pub fn process_initialize(
-    program_id: &Pubkey,
-    accounts: &[AccountInfo],
+    program_id: &Address,
+    accounts: &[AccountView],
     instruction: &[u8],
 ) -> ProgramResult {
     let [
@@ -56,38 +54,38 @@ pub fn process_initialize(
         return Err(ProgramError::MissingRequiredSignature);
     }
 
-    if !pool.data_is_empty() {
+    if !pool.is_data_empty() {
         return Err(ProgramError::AccountAlreadyInitialized);
     }
 
-    if token_a.key() == token_b.key() {
+    if token_a.address() == token_b.address() {
         return Err(ProgramError::InvalidArgument);
     }
 
-    if !lp_mint.data_is_empty() {
+    if !lp_mint.is_data_empty() {
         return Err(ProgramError::AccountAlreadyInitialized);
     }
 
-    if system_program.key() != &SYSTEM_PROGRAM_ID {
+    if system_program.address().as_array() != &SYSTEM_PROGRAM_ID {
         return Err(ProgramError::IncorrectProgramId);
     }
 
-    if token_program.key() != &ID {
+    if token_program.address() != &ID {
         return Err(ProgramError::IncorrectProgramId);
     }
 
-    let vault_a_account = TokenAccount::from_account_info(vault_a)?;
+    let vault_a_account = TokenAccount::from_account_view(vault_a)?;
 
-    let vault_b_account = TokenAccount::from_account_info(vault_b)?;
+    let vault_b_account = TokenAccount::from_account_view(vault_b)?;
 
-    if vault_a_account.mint() != token_a.key() {
+    if vault_a_account.mint() != token_a.address() {
         return Err(ProgramError::InvalidAccountData);
     }
     if vault_a_account.amount() != 0 {
         return Err(ProgramError::AccountAlreadyInitialized);
     }
 
-    if vault_b_account.mint() != token_b.key() {
+    if vault_b_account.mint() != token_b.address() {
         return Err(ProgramError::InvalidAccountData);
     }
     if vault_b_account.amount() != 0 {
@@ -106,30 +104,32 @@ pub fn process_initialize(
         return Err(ProgramError::InvalidArgument);
     }
 
-    let pool_pda = pinocchio::pubkey::create_program_address(
+    let pool_pda = Address::create_program_address(
         &[
             POOL_SEED.as_bytes(),
-            token_a.key().as_ref(),
-            token_b.key().as_ref(),
+            token_a.address().as_ref(),
+            token_b.address().as_ref(),
             &[data.pool_bump],
         ],
         program_id,
-    )?;
+    )
+    .map_err(|_| ProgramError::InvalidSeeds)?;
 
-    if pool.key() != &pool_pda {
+    if pool.address() != &pool_pda {
         return Err(ProgramError::InvalidAccountData);
     }
 
-    let lp_mint_pda = pinocchio::pubkey::create_program_address(
+    let lp_mint_pda = Address::create_program_address(
         &[
             LP_MINT_SEED.as_bytes(),
-            pool.key().as_ref(),
+            pool.address().as_ref(),
             &[data.lp_mint_bump],
         ],
         program_id,
-    )?;
+    )
+    .map_err(|_| ProgramError::InvalidSeeds)?;
 
-    if lp_mint.key() != &lp_mint_pda {
+    if lp_mint.address() != &lp_mint_pda {
         return Err(ProgramError::InvalidAccountData);
     }
 
@@ -138,8 +138,8 @@ pub fn process_initialize(
     let binding = [data.pool_bump];
     let pool_seed = [
         Seed::from(POOL_SEED.as_bytes()),
-        Seed::from(token_a.key().as_ref()),
-        Seed::from(token_b.key().as_ref()),
+        Seed::from(token_a.address().as_ref()),
+        Seed::from(token_b.address().as_ref()),
         Seed::from(&binding),
     ];
 
@@ -149,21 +149,23 @@ pub fn process_initialize(
         from: authority,
         to: pool,
         space: Pool::LEN as u64,
-        lamports: rent.minimum_balance(Pool::LEN),
+        lamports: rent
+            .try_minimum_balance(Pool::LEN)
+            .map_err(|_| ProgramError::InvalidAccountData)?,
         owner: program_id,
     })
     .invoke_signed(&[pool_seed_signer])?;
 
-    let mut pool_data = pool.try_borrow_mut_data()?;
+    let mut pool_data = pool.try_borrow_mut()?;
     let pool_state = Pool::load_mut(&mut pool_data)?;
 
     pool_state.set_inner_full(Pool {
-        authority: *pool.key(),
-        token_a: *token_a.key(),
-        token_b: *token_b.key(),
-        lp_mint: *lp_mint.key(),
-        vault_a: *vault_a.key(),
-        vault_b: *vault_b.key(),
+        authority: *pool.address().as_array(),
+        token_a: *token_a.address().as_array(),
+        token_b: *token_b.address().as_array(),
+        lp_mint: *lp_mint.address().as_array(),
+        vault_a: *vault_a.address().as_array(),
+        vault_b: *vault_b.address().as_array(),
         reserve_a: 0,
         reserve_b: 0,
         fee_rate: data.fee_rate,
@@ -175,7 +177,7 @@ pub fn process_initialize(
     let binding = [data.lp_mint_bump];
     let lp_mint_seed = [
         Seed::from(LP_MINT_SEED.as_bytes()),
-        Seed::from(pool.key().as_ref()),
+        Seed::from(pool.address().as_ref()),
         Seed::from(&binding),
     ];
 
@@ -183,7 +185,9 @@ pub fn process_initialize(
         from: authority,
         to: lp_mint,
         space: Mint::LEN as u64,
-        lamports: rent.minimum_balance(Mint::LEN),
+        lamports: rent
+            .try_minimum_balance(Mint::LEN)
+            .map_err(|_| ProgramError::InvalidAccountData)?,
         owner: &ID,
     })
     .invoke_signed(&[Signer::from(&lp_mint_seed[..])])?;
@@ -191,10 +195,10 @@ pub fn process_initialize(
     InitializeMint2 {
         mint: lp_mint,
         decimals: 6,
-        mint_authority: pool.key(),
+        mint_authority: pool.address(),
         freeze_authority: None,
     }
-    .invoke_signed(&[Signer::from(&lp_mint_seed[..])])?;
+    .invoke()?;
 
     Ok(())
 }

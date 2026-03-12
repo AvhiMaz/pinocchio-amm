@@ -1,7 +1,5 @@
 use bytemuck::{Pod, Zeroable};
-use pinocchio::{
-    ProgramResult, account_info::AccountInfo, program_error::ProgramError, pubkey::Pubkey,
-};
+use pinocchio::{AccountView, Address, ProgramResult, error::ProgramError};
 use pinocchio_token::{
     instructions::{MintTo, Transfer},
     state::{Mint, TokenAccount},
@@ -29,8 +27,8 @@ impl AddLiquidityInstructionData {
 }
 
 pub fn process_add_liquidity(
-    _program_id: &Pubkey,
-    accounts: &[AccountInfo],
+    _program_id: &Address,
+    accounts: &[AccountView],
     instruction: &[u8],
 ) -> ProgramResult {
     let [
@@ -59,20 +57,20 @@ pub fn process_add_liquidity(
     validate_non_zero(data.amount_b)?;
 
     let lp_tokens_to_mint = {
-        let mut pool_data = pool.try_borrow_mut_data()?;
+        let mut pool_data = pool.try_borrow_mut()?;
         let pool_state = Pool::load_mut(&mut pool_data)?;
 
-        let lp_mint_acc = Mint::from_account_info(lp_mint)?;
-        let user_token_a_acc = TokenAccount::from_account_info(user_token_a)?;
-        let user_token_b_acc = TokenAccount::from_account_info(user_token_b)?;
-        let user_lp_token_acc = TokenAccount::from_account_info(user_lp_token)?;
+        let lp_mint_acc = Mint::from_account_view(lp_mint)?;
+        let user_token_a_acc = TokenAccount::from_account_view(user_token_a)?;
+        let user_token_b_acc = TokenAccount::from_account_view(user_token_b)?;
+        let user_lp_token_acc = TokenAccount::from_account_view(user_lp_token)?;
 
-        validate_pubkey_match(lp_mint.key(), &pool_state.lp_mint)?;
-        validate_pubkey_match(vault_a.key(), &pool_state.vault_a)?;
-        validate_pubkey_match(vault_b.key(), &pool_state.vault_b)?;
-        validate_pubkey_match(user_token_a_acc.mint(), &pool_state.token_a)?;
-        validate_pubkey_match(user_token_b_acc.mint(), &pool_state.token_b)?;
-        validate_pubkey_match(user_lp_token_acc.mint(), &pool_state.lp_mint)?;
+        validate_pubkey_match(lp_mint.address().as_array(), &pool_state.lp_mint)?;
+        validate_pubkey_match(vault_a.address().as_array(), &pool_state.vault_a)?;
+        validate_pubkey_match(vault_b.address().as_array(), &pool_state.vault_b)?;
+        validate_pubkey_match(user_token_a_acc.mint().as_array(), &pool_state.token_a)?;
+        validate_pubkey_match(user_token_b_acc.mint().as_array(), &pool_state.token_b)?;
+        validate_pubkey_match(user_lp_token_acc.mint().as_array(), &pool_state.lp_mint)?;
 
         let total_lp_supply = lp_mint_acc.supply();
 
@@ -135,7 +133,7 @@ pub fn process_add_liquidity(
     }
     .invoke_signed(&[create_pool_signer(&pool_seed)])?;
 
-    let mut pool_data = pool.try_borrow_mut_data()?;
+    let mut pool_data = pool.try_borrow_mut()?;
     let pool_state = Pool::load_mut(&mut pool_data)?;
 
     pool_state.reserve_a = pool_state

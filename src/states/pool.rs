@@ -1,15 +1,15 @@
 use bytemuck::{Pod, Zeroable};
-use pinocchio::{program_error::ProgramError, pubkey::Pubkey};
+use pinocchio::error::ProgramError;
 
 #[repr(C)]
 #[derive(Copy, Clone, Pod, Zeroable)]
 pub struct Pool {
-    pub authority: Pubkey,
-    pub token_a: Pubkey,
-    pub token_b: Pubkey,
-    pub lp_mint: Pubkey,
-    pub vault_a: Pubkey,
-    pub vault_b: Pubkey,
+    pub authority: [u8; 32],
+    pub token_a: [u8; 32],
+    pub token_b: [u8; 32],
+    pub lp_mint: [u8; 32],
+    pub vault_a: [u8; 32],
+    pub vault_b: [u8; 32],
     pub reserve_a: u64,
     pub reserve_b: u64,
     pub fee_rate: u16,
@@ -22,17 +22,7 @@ impl Pool {
     pub const LEN: usize = core::mem::size_of::<Self>();
 
     pub fn set_inner_full(&mut self, args: Pool) {
-        self.authority = args.authority;
-        self.token_a = args.token_a;
-        self.token_b = args.token_b;
-        self.lp_mint = args.lp_mint;
-        self.vault_a = args.vault_a;
-        self.vault_b = args.vault_b;
-        self.reserve_a = args.reserve_a;
-        self.reserve_b = args.reserve_b;
-        self.fee_rate = args.fee_rate;
-        self.bump = args.bump;
-        self.lp_mint_bump = args.lp_mint_bump;
+        *self = args;
     }
 
     pub fn load_mut(data: &mut [u8]) -> Result<&mut Self, ProgramError> {

@@ -1,8 +1,8 @@
 #![allow(unexpected_cfgs)]
 
 use pinocchio::{
-    ProgramResult, account_info::AccountInfo, default_panic_handler, no_allocator,
-    program_entrypoint, program_error::ProgramError, pubkey::Pubkey,
+    AccountView, Address, ProgramResult, default_panic_handler, error::ProgramError, no_allocator,
+    program_entrypoint,
 };
 
 use crate::instructions::{
@@ -17,8 +17,8 @@ no_allocator!();
 default_panic_handler!();
 
 fn process_instruction(
-    program_id: &Pubkey,
-    accounts: &[AccountInfo],
+    program_id: &Address,
+    accounts: &[AccountView],
     instruction_data: &[u8],
 ) -> ProgramResult {
     match instruction_data.split_first() {

@@ -1,7 +1,5 @@
 use bytemuck::{Pod, Zeroable};
-use pinocchio::{
-    ProgramResult, account_info::AccountInfo, program_error::ProgramError, pubkey::Pubkey,
-};
+use pinocchio::{AccountView, Address, ProgramResult, error::ProgramError};
 use pinocchio_token::{instructions::Transfer, state::TokenAccount};
 
 use super::{
@@ -24,8 +22,8 @@ impl SwapInstructionData {
 }
 
 pub fn process_swap(
-    _program_id: &Pubkey,
-    accounts: &[AccountInfo],
+    _program_id: &Address,
+    accounts: &[AccountView],
     instructions: &[u8],
 ) -> ProgramResult {
     let [
@@ -53,46 +51,50 @@ pub fn process_swap(
     validate_non_zero(data.amount_in)?;
 
     let (amount_out, is_a_to_b, token_a, token_b, pool_bump) = {
-        let pool_state = pool.try_borrow_data()?;
+        let pool_state = pool.try_borrow()?;
         let pool = Pool::load(&pool_state)?;
 
-        let user_input_acc = TokenAccount::from_account_info(user_input_account)?;
-        let user_output_acc = TokenAccount::from_account_info(user_output_account)?;
+        let user_input_acc = TokenAccount::from_account_view(user_input_account)?;
+        let user_output_acc = TokenAccount::from_account_view(user_output_account)?;
 
-        let (reserve_in, reserve_out, is_a_to_b) =
-            if input_mint.key() == &pool.token_a && output_mint.key() == &pool.token_b {
-                if input_vault.key() != &pool.vault_a {
-                    return Err(ProgramError::InvalidAccountData);
-                }
+        let (reserve_in, reserve_out, is_a_to_b) = if input_mint.address().as_array()
+            == &pool.token_a
+            && output_mint.address().as_array() == &pool.token_b
+        {
+            if input_vault.address().as_array() != &pool.vault_a {
+                return Err(ProgramError::InvalidAccountData);
+            }
 
-                if output_vault.key() != &pool.vault_b {
-                    return Err(ProgramError::InvalidAccountData);
-                }
-                (pool.reserve_a, pool.reserve_b, true)
-            } else if input_mint.key() == &pool.token_b && output_mint.key() == &pool.token_a {
-                if input_vault.key() != &pool.vault_b {
-                    return Err(ProgramError::InvalidAccountData);
-                }
+            if output_vault.address().as_array() != &pool.vault_b {
+                return Err(ProgramError::InvalidAccountData);
+            }
+            (pool.reserve_a, pool.reserve_b, true)
+        } else if input_mint.address().as_array() == &pool.token_b
+            && output_mint.address().as_array() == &pool.token_a
+        {
+            if input_vault.address().as_array() != &pool.vault_b {
+                return Err(ProgramError::InvalidAccountData);
+            }
 
-                if output_vault.key() != &pool.vault_a {
-                    return Err(ProgramError::InvalidAccountData);
-                }
-                (pool.reserve_b, pool.reserve_a, false)
-            } else {
-                return Err(ProgramError::IllegalOwner);
-            };
+            if output_vault.address().as_array() != &pool.vault_a {
+                return Err(ProgramError::InvalidAccountData);
+            }
+            (pool.reserve_b, pool.reserve_a, false)
+        } else {
+            return Err(ProgramError::IllegalOwner);
+        };
 
-        if user_input_acc.mint() != input_mint.key() {
+        if user_input_acc.mint() != input_mint.address() {
             return Err(ProgramError::InvalidAccountData);
         }
-        if user_output_acc.mint() != output_mint.key() {
+        if user_output_acc.mint() != output_mint.address() {
             return Err(ProgramError::InvalidAccountData);
         }
 
-        if user_input_acc.owner() != user.key() {
+        if user_input_acc.owner() != user.address() {
             return Err(ProgramError::InvalidAccountData);
         }
-        if user_output_acc.owner() != user.key() {
+        if user_output_acc.owner() != user.address() {
             return Err(ProgramError::InvalidAccountData);
         }
         let amount_in_with_fee = data
@@ -141,7 +143,7 @@ pub fn process_swap(
     }
     .invoke_signed(&[create_pool_signer(&pool_seed)])?;
 
-    let mut pool_data = pool.try_borrow_mut_data()?;
+    let mut pool_data = pool.try_borrow_mut()?;
     let pool_state = Pool::load_mut(&mut pool_data)?;
 
     if is_a_to_b {
